@@ -101,3 +101,58 @@ def test_step_count_must_divide_the_rollout_count():
     args = Namespace(critic_num_steps_per_rollout=4, seed=0, use_dynamic_batch_size=False, micro_batch_size=1)
     with pytest.raises(AssertionError, match="does not divide"):
         get_critic_train_schedule(args, _rollout_data([10] * 6), rollout_id=0, num_rollouts=[6])
+
+
+@pytest.mark.parametrize("dp_size", [2, 4])
+def test_full_history_shards_feed_existing_critic_minibatches(monkeypatch, dp_size):
+    from types import SimpleNamespace
+
+    from miles.backends.training_utils.data import rollout as scheduling
+    from miles.ray.rollout.train_data_conversion import process_rollout_data_shard, split_full_history_shards
+    from tests.fast.ray.rollout.test_full_history_shards import _args, _data
+
+    monkeypatch.setattr(torch.cuda, "current_device", lambda: "cpu")
+    # Exercise each advertised rank on CPU; the tiny episode lengths require
+    # one micro-batch per critic step on every rank, so the MAX is identity.
+    monkeypatch.setattr(
+        scheduling.GeneralPGUtil, "create", lambda group: SimpleNamespace(all_reduce=lambda *a, **kw: None)
+    )
+    args = _args(seed=1234)
+    actor, critic, spans = _data()
+    _, shards = split_full_history_shards(args, actor, critic, spans, {"dp_size": dp_size})
+    global_steps = [[], []]
+    for rank, shard in enumerate(shards):
+        state = SimpleNamespace(
+            effective_dp=SimpleNamespace(rank=rank, size=dp_size, group=None), cp=SimpleNamespace(size=1), vpp_size=1
+        )
+        monkeypatch.setattr(scheduling, "get_parallel_state", lambda state=state: state)
+        data = process_rollout_data_shard(args, shard)
+        data["sample_ids"] = data["rollout_ids"]
+        iterators, counts, rollouts = get_critic_train_schedule(args, data, rollout_id=3, num_rollouts=[8])
+        assert rollouts == [4, 4]
+        for step, batches in enumerate(_drain(iterators, counts)):
+            ids = [i for batch in batches for i in batch]
+            assert len(ids) == 4 // dp_size
+            global_steps[step].extend(ids)
+    assert all(len(step) == 4 for step in global_steps)
+    assert sorted(global_steps[0] + global_steps[1]) == list(range(100, 108))
+
+
+def test_shared_critic_keeps_sample_based_minibatches_even_with_rollout_ids(monkeypatch):
+    monkeypatch.setattr(torch.cuda, "current_device", lambda: "cpu")
+    args = Namespace(
+        critic_context_mode="shared",
+        critic_num_steps_per_rollout=2,
+        seed=7,
+        use_dynamic_batch_size=True,
+        max_tokens_per_gpu=100,
+    )
+    data = _rollout_data([10] * 8)
+    # Unequal sibling counts: adopting the upstream shared-mode episode scheduler
+    # would give different membership here. Shared must still shuffle sample rows.
+    data["rollout_ids"] = [0, 0, 0, 1, 2, 3, 3, 3]
+    actual, counts, _ = get_critic_train_schedule(args, data, rollout_id=0, num_rollouts=[4])
+    expected, expected_counts, _ = get_critic_train_schedule(
+        args, _rollout_data([10] * 8), rollout_id=0, num_rollouts=[4]
+    )
+    assert _drain(actual, counts) == _drain(expected, expected_counts)

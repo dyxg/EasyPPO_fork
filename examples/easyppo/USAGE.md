@@ -67,10 +67,20 @@ Miles. `--num-critic-only-steps` controls warmup. To train only the critic, set 
 equal to `--num-rollout`. Single-turn training is also available by passing
 `--custom-rm-path your_module.reward` instead of the agentic wrapper.
 
-`full_history` currently requires data-parallel size 1 and colocated actor/episode
-samples; custom train-data conversion and delayed DP splitting are unsupported.
-Choose GPU count and tensor parallelism accordingly. Full-history sequence
-lengths can be substantially larger than actor contexts.
+`full_history` uses joint episode placement across DP ranks: each complete critic
+episode and all of its actor segments go to corresponding ranks. Only this mode
+changes placement; `shared` keeps the existing scheduler. It requires dynamic
+micro-batching, CP=1 and VPP=1, complete logical batches, a global batch size
+divisible by DP size, and an episode count divisible by DP size times the number
+of critic mini-batch steps. Custom train-data conversion and delayed DP splitting
+remain unsupported. Each complete episode must fit `--max-tokens-per-gpu`;
+full-history lengths can be substantially larger than actor contexts.
+
+## Terminal tasks
+
+TMAX training and Terminal-Bench 2.1 evaluation use Harbor environments with a
+mini-swe-agent harness, summary/retained-turn compaction, and the same shared or
+full-history critic mapping. See [terminal setup and commands](TERMINAL.md).
 
 ## Standalone critic training with memory
 

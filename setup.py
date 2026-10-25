@@ -46,6 +46,10 @@ setup(
     package_data={"miles.dashboard": ["static/*"]},
     install_requires=_fetch_requirements("requirements.txt"),
     extras_require={
+        "terminal": [
+            "harbor==0.24.0",
+            "mini-swe-agent==1.17.1",
+        ],
         "agentic": [
             "torch>=2.0",
             "transformers==5.12.1",
