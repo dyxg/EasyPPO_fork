@@ -24,9 +24,9 @@ class FcsWorkspaceAgent(TerminalAgent):
         max_turns,
         reasoning_effort=FCS_REASONING_EFFORT,
     ):
-        if max_submissions < 1 or max_turns < 1:
-            raise ValueError("FCS submission and turn limits must be positive")
-        super().__init__(tokenizer=tokenizer, decode=decode, execute=self._command, config=replace(config, max_steps=max_turns))
+        if max_submissions < 1 or max_turns < 0:
+            raise ValueError("FCS requires a positive submission limit and a nonnegative turn limit")
+        super().__init__(tokenizer=tokenizer, decode=decode, execute=self._command, config=replace(config, max_steps=max_turns or None))
         self.config.format_error_template = (
             "Use exactly one bash block. To submit your current C++ file to the judge, send:\n" + _SUBMIT_EXAMPLE
         )
@@ -43,9 +43,13 @@ class FcsWorkspaceAgent(TerminalAgent):
         }
 
     def _initial_messages(self, task):
+        budget = (
+            f"You have {self.options.max_steps} actions in total, including edits, tests and submissions."
+            if self.options.max_steps is not None
+            else f"You have a total generation budget of {self.options.max_total_tokens:,} tokens."
+        )
         system = (
-            f"{SHELL_INSTRUCTIONS}\n\nYou have {self.options.max_steps} actions in total, including edits, tests "
-            f"and submissions. You may submit up to {self.max_submissions} times. The highest judge score counts. "
+            f"{SHELL_INSTRUCTIONS}\n\n{budget} You may submit up to {self.max_submissions} times. The highest judge score counts. "
             "Submit a first runnable solution as soon as it is ready, then use the feedback to improve it. "
             "Submit the saved file in a separate action, exactly like this (change the path if needed):\n"
             + _SUBMIT_EXAMPLE

@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import math
 from dataclasses import asdict, dataclass, field, replace
+from itertools import count
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
@@ -71,7 +72,7 @@ _OBSERVATION = """<returncode>{{output.returncode}}</returncode>
 @dataclass(frozen=True)
 class TerminalConfig:
     enable_thinking: bool = True
-    max_steps: int = 100
+    max_steps: int | None = 100
     max_context_tokens: int = 32768
     max_new_tokens: int = 4096
     max_total_tokens: int = 65536
@@ -101,6 +102,8 @@ class TerminalConfig:
             "max_output_chars",
         ):
             value = getattr(self, name)
+            if name == "max_steps" and value is None:
+                continue
             if type(value) is not int or value <= 0:
                 raise ValueError(f"terminal {name} must be a positive integer")
         if self.compaction not in ("summary", "keep_last_turns", "none"):
@@ -501,7 +504,8 @@ class TerminalAgent(DefaultAgent):
         self.messages = self._initial_messages(task)
         self.original_messages = list(self.messages)
         try:
-            for _ in range(self.options.max_steps):
+            steps = count() if self.options.max_steps is None else range(self.options.max_steps)
+            for _ in steps:
                 try:
                     await self._step()
                 except NonTerminatingException as exc:

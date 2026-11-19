@@ -97,9 +97,9 @@ def _config(args, metadata: dict) -> TerminalConfig:
 def _validate_runtime(args, *, evaluation: bool = False):
     if (
         getattr(args, "fcs_max_submissions", DEFAULT_MAX_SUBMISSIONS) < 1
-        or getattr(args, "fcs_max_turns", DEFAULT_MAX_TURNS) < 1
+        or getattr(args, "fcs_max_turns", DEFAULT_MAX_TURNS) < 0
     ):
-        raise ValueError("FCS submission and turn limits must be positive")
+        raise ValueError("FCS requires a positive submission limit and a nonnegative turn limit")
     if getattr(args, "terminal_memory_mb", None) is not None and args.terminal_memory_mb <= 0:
         raise ValueError("terminal memory must be positive")
     if args.partial_rollout:
@@ -325,7 +325,8 @@ def _add_arguments(parser):
     parser.add_argument("--terminal-tasks-dir", default="")
     parser.add_argument("--terminal-agent-protocol", choices=("terminal", "fcs-submit", "fcs-workspace"), default="terminal")
     parser.add_argument("--fcs-max-submissions", type=int, default=DEFAULT_MAX_SUBMISSIONS)
-    parser.add_argument("--fcs-max-turns", type=int, default=DEFAULT_MAX_TURNS)
+    parser.add_argument("--fcs-max-turns", type=int, default=DEFAULT_MAX_TURNS,
+                        help="Maximum actions per session. Use 0 for unlimited actions in fcs-workspace.")
     parser.add_argument("--terminal-trials-dir", default="terminal-trials")
     parser.add_argument(
         "--terminal-environment", choices=("docker", "daytona", "modal", "shared-judge"), default="docker"

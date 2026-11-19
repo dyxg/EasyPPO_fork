@@ -588,7 +588,8 @@ async def test_native_template_rewrite_preserves_only_new_feedback_for_memory_cr
 
 
 @pytest.mark.asyncio
-async def test_workspace_compiles_runs_and_submits_persistent_source(tmp_path):
+@pytest.mark.parametrize("max_turns", [0, 6])
+async def test_workspace_compiles_runs_and_submits_persistent_source(tmp_path, max_turns):
     from agentic_critic.fcs_workspace import FcsWorkspaceAgent
 
     program = '#include <iostream>\nint main(){int x;std::cin>>x;std::cout<<x+1<<"\\n";}\n'
@@ -619,12 +620,13 @@ async def test_workspace_compiles_runs_and_submits_persistent_source(tmp_path):
 
     agent = FcsWorkspaceAgent(
         tokenizer=Tokenizer(), decode=decode, execute=shell, submit=submit,
-        config=TerminalConfig(), max_submissions=2, max_turns=6,
+        config=TerminalConfig(), max_submissions=2, max_turns=max_turns,
     )
     trace = await agent.run_async("Add one to the input.")
     assert "<output>6\n</output>" in prompts[2]
     system = prompts[0].split("</system>", 1)[0]
-    assert "6 actions in total" in system and "COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT" not in system
+    assert ("6 actions in total" if max_turns else "65,536 tokens") in system
+    assert "COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT" not in system
     assert "```bash\n" + r"\submit main.cpp" + "\n```" in system
     assert "There is no judge submission yet" in prompts[3]
     assert "Cannot read source file" in prompts[4]
