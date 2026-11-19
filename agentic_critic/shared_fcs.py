@@ -15,6 +15,7 @@ from harbor.models.task.task import Task
 
 from agentic_critic.fcs_judge import judge_feedback
 from agentic_critic.fcs_terminal import FcsSubmissionAgent
+from agentic_critic.fcs_workspace import FcsWorkspaceAgent
 from miles.utils.http_utils import GeneralHttpClientProvider
 from scripts.frontiersmith_verifier import write_submission_rewards
 
@@ -96,6 +97,7 @@ async def run_shared_judge_episode(
     config,
     max_submissions: int,
     max_turns: int,
+    workspace_execute=None,
 ):
     origin = urlsplit(judge_url or "")
     if (
@@ -134,7 +136,7 @@ async def run_shared_judge_episode(
         verdicts.append(verdict)
         return feedback
 
-    agent = FcsSubmissionAgent(
+    agent_args = dict(
         tokenizer=tokenizer,
         decode=decode,
         config=config,
@@ -142,6 +144,10 @@ async def run_shared_judge_episode(
         max_submissions=max_submissions,
         max_turns=max_turns,
     )
+    if workspace_execute is None:
+        agent = FcsSubmissionAgent(**agent_args)
+    else:
+        agent = FcsWorkspaceAgent(**agent_args, execute=workspace_execute, reasoning_effort=config.fcs_workspace_effort)
     trial_dir = trials_dir / f"{task_path.name}__{uuid4().hex}"
     started_at = datetime.now(UTC)
     deadline = asyncio.timeout(task.config.agent.timeout_sec)

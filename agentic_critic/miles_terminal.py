@@ -285,7 +285,7 @@ async def generate(input):
         # FCS continues length-limited turns, but the reference masks affected
         # segments out of actor training. Terminal tasks retain their episode policy.
         truncated = trace.truncated
-        if agent_protocol == "fcs-submit":
+        if agent_protocol in ("fcs-submit", "fcs-workspace"):
             episode_interrupted = trace.truncated and trace.exit_status != "ContextOrTokenLimit"
             truncated = episode_interrupted or segment_metadata["generation_truncated"]
         sample.status = Sample.Status.TRUNCATED if truncated else Sample.Status.COMPLETED
@@ -323,14 +323,14 @@ def _add_arguments(parser):
             kwargs["choices"] = ("summary", "keep_last_turns", "none")
         parser.add_argument("--terminal-" + f.name.replace("_", "-"), **kwargs)
     parser.add_argument("--terminal-tasks-dir", default="")
-    parser.add_argument("--terminal-agent-protocol", choices=("terminal", "fcs-submit"), default="terminal")
+    parser.add_argument("--terminal-agent-protocol", choices=("terminal", "fcs-submit", "fcs-workspace"), default="terminal")
     parser.add_argument("--fcs-max-submissions", type=int, default=DEFAULT_MAX_SUBMISSIONS)
     parser.add_argument("--fcs-max-turns", type=int, default=DEFAULT_MAX_TURNS)
     parser.add_argument("--terminal-trials-dir", default="terminal-trials")
     parser.add_argument(
         "--terminal-environment", choices=("docker", "daytona", "modal", "shared-judge"), default="docker"
     )
-    parser.add_argument("--fcs-judge-url", help="Shared judge HTTP(S) base URL for the submit-only protocol")
+    parser.add_argument("--fcs-judge-url", help="Shared judge HTTP(S) base URL for Frontier-CS submissions")
     parser.add_argument("--terminal-memory-mb", type=int, default=None)
     parser.add_argument("--terminal-docker-compose", action="append", default=[])
     parser.add_argument("--terminal-reward-key", default="reward")

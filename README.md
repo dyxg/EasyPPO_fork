@@ -160,6 +160,14 @@ directly to the judge. Pass `--frontier-judge-url "$JUDGE_URL"` when launching
 standalone training. On a single host, the default is `http://127.0.0.1:8081`.
 Modal supplies its own judge endpoint.
 
+For a persistent coding workspace, set the Miles rollout arguments
+`--terminal-agent-protocol fcs-workspace --terminal-environment modal --fcs-judge-url "$JUDGE_URL"`.
+Each episode gets a separate CPU sandbox with bash, Python and g++. The agent can
+edit files, run sample inputs, and issue a standalone `\submit main.cpp` in a bash
+block. The rollout worker reads that file and returns the shared judge feedback.
+Files persist through context compaction. Use `--terminal-fcs-workspace-effort low`
+for low-effort actions on Qwen3.8; the FCS summary uses low effort.
+
 The asynchronous FrontierSmith recipe defaults to Harbor Docker. Select
 `--terminal-environment docker` to use it in the synchronous recipe. Its
 containers read the judge URL from the prepared task, with single-host default

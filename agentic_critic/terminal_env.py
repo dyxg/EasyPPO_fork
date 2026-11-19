@@ -82,6 +82,7 @@ class TerminalConfig:
     command_timeout: int = 120
     max_output_chars: int = 16000
     fcs_summary_thinking: bool = True
+    fcs_workspace_effort: str = "medium"
 
     def __post_init__(self):
         for name in ("enable_thinking", "continue_on_length", "fcs_summary_thinking"):
@@ -453,14 +454,16 @@ class TerminalAgent(DefaultAgent):
         self._completed_prefix = None  # Explicit compaction starts a fresh actor context.
         self.trace.n_compactions += 1
 
+    def _action_content(self, response):
+        return response.text.split("</think>")[-1]
+
     async def _step(self):
         await self._compact()
         response = await self._complete(self.messages, limit=self.options.max_new_tokens, kind="action")
         # Reasoning is retained in the recorded tokens, but is not executable.
-        content = response.text.split("</think>")[-1]
         self.add_message("assistant", response.text)
         try:
-            action = self.parse_action({"content": content})
+            action = self.parse_action({"content": self._action_content(response)})
         except FormatError:
             self.trace.n_format_errors += 1
             self.trace.calls[-1]["action_status"] = "format_error"

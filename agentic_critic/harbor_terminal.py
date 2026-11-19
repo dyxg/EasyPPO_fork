@@ -85,6 +85,21 @@ async def run_trial(
     fcs_max_turns: int = DEFAULT_MAX_TURNS,
 ):
     """Run one episode with the selected environment and return its verified reward."""
+    if agent_protocol == "fcs-workspace":
+        if environment != "modal" or docker_compose:
+            raise ValueError("fcs-workspace uses an isolated Modal CPU workspace")
+        from harbor.models.task.task import Task
+
+        from agentic_critic.fcs_workspace_modal import open_workspace
+        from agentic_critic.shared_fcs import run_shared_judge_episode
+
+        task = await asyncio.to_thread(Task, task_path)
+        async with open_workspace(int(task.config.agent.timeout_sec) + 120, memory_mb or 2048) as execute:
+            return await run_shared_judge_episode(
+                task_path=task_path, trials_dir=trials_dir, judge_url=judge_url,
+                tokenizer=tokenizer, decode=decode, config=config, max_turns=fcs_max_turns,
+                max_submissions=fcs_max_submissions, workspace_execute=execute,
+            )
     if environment == "shared-judge":
         if memory_mb is not None or docker_compose:
             raise ValueError("shared-judge does not use --terminal-memory-mb or --terminal-docker-compose")

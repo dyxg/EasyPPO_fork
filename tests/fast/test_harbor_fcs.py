@@ -585,3 +585,43 @@ async def test_native_template_rewrite_preserves_only_new_feedback_for_memory_cr
     assert trace.critic_memory_exact and len(trace.critic_segments) == 3
     for content in ("TASK_SENTINEL", "PRIVATE_REASONING", "No ```cpp code block", COMPACT_PROMPT, "RETAINED_SUMMARY"):
         assert history.count(content) == 1
+
+
+@pytest.mark.asyncio
+async def test_workspace_compiles_runs_and_submits_persistent_source(tmp_path):
+    from agentic_critic.fcs_workspace import FcsWorkspaceAgent
+
+    program = '#include <iostream>\nint main(){int x;std::cin>>x;std::cout<<x+1<<"\\n";}\n'
+    commands = iter([
+        "cat > main.cpp <<'EOF'\n" + program + "EOF",
+        "g++ main.cpp -o solver && echo 5 | ./solver",
+        r"\submit missing.cpp",
+        r"\submit main.cpp",
+        r"\submit main.cpp",
+    ])
+    prompts = []
+    async def decode(ids, limit):
+        prompts.append(Tokenizer().decode(ids))
+        return completion("```bash\n" + next(commands) + "\n```")
+
+    async def shell(command, timeout):
+        proc = await asyncio.create_subprocess_exec(
+            "bash", "-c", command, cwd=tmp_path,
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
+        )
+        output, _ = await proc.communicate()
+        return {"output": output.decode(), "returncode": proc.returncode}
+
+    async def submit(code):
+        assert code == program
+        return JudgeResult(75, "done")
+
+    agent = FcsWorkspaceAgent(
+        tokenizer=Tokenizer(), decode=decode, execute=shell, submit=submit,
+        config=TerminalConfig(), max_submissions=2, max_turns=5,
+    )
+    trace = await agent.run_async("Add one to the input.")
+    assert "<output>6\n</output>" in prompts[2]
+    assert "Cannot read source file" in prompts[3]
+    assert "score=75.00/100" in prompts[4]
+    assert trace.submission_scores == [75, 75] and trace.exit_status == "Submitted"
