@@ -6,7 +6,9 @@ from dataclasses import replace
 from minisweagent.agents.default import FormatError, Submitted
 
 from agentic_critic.fcs_env import COMPACT_PROMPT, FCS_REASONING_EFFORT, FCS_SUMMARY_EFFORT, format_feedback, summary_text
-from agentic_critic.terminal_env import TerminalAgent
+from agentic_critic.terminal_env import SHELL_INSTRUCTIONS, TerminalAgent
+
+_SUBMIT_EXAMPLE = "```bash\n" + r"\submit main.cpp" + "\n```"
 
 
 class FcsWorkspaceAgent(TerminalAgent):
@@ -25,6 +27,9 @@ class FcsWorkspaceAgent(TerminalAgent):
         if max_submissions < 1 or max_turns < 1:
             raise ValueError("FCS submission and turn limits must be positive")
         super().__init__(tokenizer=tokenizer, decode=decode, execute=self._command, config=replace(config, max_steps=max_turns))
+        self.config.format_error_template = (
+            "Use exactly one bash block. To submit your current C++ file to the judge, send:\n" + _SUBMIT_EXAMPLE
+        )
         self.shell = execute
         self.submit = submit
         self.max_submissions = max_submissions
@@ -38,14 +43,26 @@ class FcsWorkspaceAgent(TerminalAgent):
         }
 
     def _initial_messages(self, task):
-        instructions = (
-            "Solve the problem by working in your persistent shell workspace. Write your C++ program to a file. "
-            "You can compile it with g++, run it on small inputs, and inspect the real output. "
-            r"To send the current contents to the judge, issue the standalone command \submit main.cpp "
-            f"in a bash block (replace main.cpp with your source path). You have {self.max_submissions} submissions. "
-            "The judge returns feedback after each submission. Your score is the highest score received."
+        system = (
+            f"{SHELL_INSTRUCTIONS}\n\nYou have {self.options.max_steps} actions in total, including edits, tests "
+            f"and submissions. You may submit up to {self.max_submissions} times. The highest judge score counts. "
+            "Submit a first runnable solution as soon as it is ready, then use the feedback to improve it. "
+            "Submit the saved file in a separate action, exactly like this (change the path if needed):\n"
+            + _SUBMIT_EXAMPLE
         )
-        return super()._initial_messages(instructions + "\n\n" + task)
+        instruction = (
+            "Solve the problem in your persistent shell workspace. Write your C++ program to a file. "
+            "You can compile it with g++, run it on small inputs and inspect the real output."
+        )
+        return [{"role": "system", "content": system}, {"role": "user", "content": instruction + "\n\n" + task}]
+
+    def has_finished(self, output):
+        try:
+            super().has_finished(output)
+        except Submitted:
+            if self.trace.submission_scores:
+                raise
+            raise FormatError("There is no judge submission yet. Submit your saved file:\n" + _SUBMIT_EXAMPLE)
 
     def _summary_request(self):
         observation = self.messages[-1]

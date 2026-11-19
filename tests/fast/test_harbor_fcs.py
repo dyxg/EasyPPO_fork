@@ -595,6 +595,7 @@ async def test_workspace_compiles_runs_and_submits_persistent_source(tmp_path):
     commands = iter([
         "cat > main.cpp <<'EOF'\n" + program + "EOF",
         "g++ main.cpp -o solver && echo 5 | ./solver",
+        "echo COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT",
         r"\submit missing.cpp",
         r"\submit main.cpp",
         r"\submit main.cpp",
@@ -618,10 +619,14 @@ async def test_workspace_compiles_runs_and_submits_persistent_source(tmp_path):
 
     agent = FcsWorkspaceAgent(
         tokenizer=Tokenizer(), decode=decode, execute=shell, submit=submit,
-        config=TerminalConfig(), max_submissions=2, max_turns=5,
+        config=TerminalConfig(), max_submissions=2, max_turns=6,
     )
     trace = await agent.run_async("Add one to the input.")
     assert "<output>6\n</output>" in prompts[2]
-    assert "Cannot read source file" in prompts[3]
-    assert "score=75.00/100" in prompts[4]
+    system = prompts[0].split("</system>", 1)[0]
+    assert "6 actions in total" in system and "COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT" not in system
+    assert "```bash\n" + r"\submit main.cpp" + "\n```" in system
+    assert "There is no judge submission yet" in prompts[3]
+    assert "Cannot read source file" in prompts[4]
+    assert "score=75.00/100" in prompts[5]
     assert trace.submission_scores == [75, 75] and trace.exit_status == "Submitted"
