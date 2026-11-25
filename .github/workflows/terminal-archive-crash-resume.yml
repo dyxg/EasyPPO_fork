@@ -1,0 +1,21 @@
+name: Terminal archive CPU crash-resume
+on:
+  push:
+    branches: [test/terminal-archive-crash-resume]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  cpu:
+    uses: ./.github/workflows/_run-cpu-ci.yml
+    with:
+      ref: test/terminal-archive-crash-resume
+      plan_already_resolved: true
+      execute_command: >-
+        python -m pip install harbor==0.24.0 mini-swe-agent==1.17.1 tomlkit
+        && python -m pytest -q
+        tests/agentic_critic/test_trial_archive.py
+        tests/agentic_critic/test_terminal_topk.py
+        tests/fast/rollout/test_fully_async_rollout_checkpoint.py
+        tests/fast/ray/rollout/test_output_snapshotter.py
+        tests/fast/rollout/test_terminal_archive_crash_resume.py
